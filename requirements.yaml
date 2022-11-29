@@ -1,4 +1,4 @@
-name: ast
+name: msqat
 channels:
   - defaults
 dependencies:
@@ -81,4 +81,4 @@ dependencies:
     - wget==3.2
     - yarg==0.1.9
     - zipp==3.4.1
-prefix: D:\StudyTools\Anaconda\envs\ast
+prefix: D:\StudyTools\Anaconda\envs\msqat
