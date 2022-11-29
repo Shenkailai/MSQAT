@@ -140,9 +140,9 @@ if __name__ == '__main__':
                         default=r'E:\SQA\NISQA_Corpus\NISQA_corpus_file.csv', help="csv with class labels")
     parser.add_argument("--dataset", type=str, default="nisqa",
                         help="the dataset used", choices=["nisqa", "tencent", "pstn"])
-    parser.add_argument("--exp_dir", type=str, default="./nisqa_ssast_pre",
+    parser.add_argument("--exp_dir", type=str, default="./output/nisqa/models",
                         help="directory to dump experiments")
-    parser.add_argument("--log_dir", type=str, default="./nisqa_ssast_pre_logs",
+    parser.add_argument("--log_dir", type=str, default="./output/nisqa/logs",
                         help="directory to dump logs")
     parser.add_argument('-b', '--batch_size', default=4,
                         type=int, metavar='N', help='mini-batch size')
@@ -230,7 +230,9 @@ if __name__ == '__main__':
 
     print('Now starting training for {:d} epochs'.format(args.n_epochs))
     tensorboard_path = os.path.join('./output/tensorboard/', model_tag)
+
     if not os.path.exists(tensorboard_path):
+        os.mkdir('./output/tensorboard/')
         os.mkdir(tensorboard_path)
     # loss function
     if args.loss_type == 'mae':
