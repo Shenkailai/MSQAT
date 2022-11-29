@@ -85,11 +85,6 @@ class NisqaDataset(Dataset):
         self.datapath = datapath
         print('---------------the {:s} dataloader---------------'.format(self.audio_conf.get('mode')))
         self.melbins = self.audio_conf.get('num_mel_bins')
-        self.freqm = self.audio_conf.get('freqm')
-        self.timem = self.audio_conf.get('timem')
-        print('now using following mask: {:d} freq, {:d} time'.format(self.audio_conf.get('freqm'), self.audio_conf.get('timem')))
-        self.mixup = self.audio_conf.get('mixup')
-        print('now using mix-up with rate {:f}'.format(self.mixup))
         self.dataset = self.audio_conf.get('dataset')
         print('now process ' + self.dataset)
         # dataset spectrogram mean and std, used to normalize the input
@@ -102,49 +97,16 @@ class NisqaDataset(Dataset):
             print('now skip normalization (use it ONLY when you are computing the normalization stats).')
         else:
             print('use dataset mean {:.3f} and std {:.3f} to normalize the input.'.format(self.norm_mean, self.norm_std))
-        # if add noise for data augmentation
-        self.noise = self.audio_conf.get('noise')
-        if self.noise == True:
-            print('now use noise augmentation')
 
         self.index_dict = make_index_dict(label_csv, isTrain, Eval)
         self.name_dict = make_name_dict(label_csv, isTrain, Eval)
         self.label_num = len(self.index_dict)
         print('number of wavs is {:d}'.format(self.label_num))
 
-    def _wav2fbank(self, filename, filename2=None):
-        # mixup
-        if filename2 == None:
-            waveform, sr = torchaudio.load(filename)
-            waveform = waveform - waveform.mean()
-        # mixup
-        else:
-            waveform1, sr = torchaudio.load(filename)
-            waveform2, _ = torchaudio.load(filename2)
+    def _wav2fbank(self, filename):
 
-            waveform1 = waveform1 - waveform1.mean()
-            waveform2 = waveform2 - waveform2.mean()
-
-            if waveform1.shape[1] != waveform2.shape[1]:
-                if waveform1.shape[1] > waveform2.shape[1]:
-                    # padding
-                    temp_wav = torch.zeros(1, waveform1.shape[1])
-                    temp_wav[0, 0:waveform2.shape[1]] = waveform2
-                    waveform2 = temp_wav
-                else:
-                    # cutting
-                    waveform2 = waveform2[0, 0:waveform1.shape[1]]
-
-            # sample lambda from uniform distribution
-            #mix_lambda = random.random()
-            # sample lambda from beta distribtion
-            mix_lambda = np.random.beta(10, 10)
-
-            mix_waveform = mix_lambda * waveform1 + (1 - mix_lambda) * waveform2
-            waveform = mix_waveform - mix_waveform.mean()
-
-
-        
+        waveform, sr = torchaudio.load(filename)
+        waveform = waveform - waveform.mean()
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
                                                   window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10)
 
@@ -152,7 +114,6 @@ class NisqaDataset(Dataset):
         n_frames = fbank.shape[0]
         if self.audio_conf.get('padding_mode') == 'zero_padding':
             p = target_length - n_frames
-
             # cut and pad
             if p > 0:
                 m = torch.nn.ZeroPad2d((0, 0, 0, p))
@@ -165,34 +126,10 @@ class NisqaDataset(Dataset):
             to_dup = [fbank for t in range(dup_times)]
             to_dup.append(fbank[:remain, :])
             fbank = torch.Tensor(np.concatenate(to_dup, axis = 0))
-        elif self.audio_conf.get('padding_mode') == 'noise':
-            SNR = 30
-            random_values = Tensor(np.random.rand(waveform.shape[1])).unsqueeze(dim = 0)
-            # 计算语音信号功率Ps和噪声功率Pn1
-            Ps = torch.sum(waveform ** 2) / waveform.shape[1]
-            Pn1 = torch.sum(random_values ** 2) / random_values.shape[1]
 
-            # 计算k值
-            k = math.sqrt(Ps / (10 ** (SNR / 10) * Pn1))
-            # 将噪声数据乘以k,
-            random_values_we_need = random_values * k
-
-            noise_fbank = torchaudio.compliance.kaldi.fbank(random_values_we_need, htk_compat=True, sample_frequency=sr, use_energy=False,
-                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10)
-
-            dup_times = target_length // n_frames
-            remain = target_length - n_frames * dup_times
-            to_dup = [noise_fbank for t in range(dup_times)]
-            to_dup.append(fbank[:remain, :])
-            fbank = torch.Tensor(np.concatenate(to_dup, axis = 0))
-
-
-
-
-        if filename2 == None:
-            return fbank, 0
-        else:
-            return fbank, mix_lambda
+       
+        return fbank
+       
 
     def __getitem__(self, index):
         """
@@ -201,50 +138,14 @@ class NisqaDataset(Dataset):
         audio is a FloatTensor of size (N_freq, N_frames) for spectrogram, or (N_frames) for waveform
         nframes is an integer
         """
-        # do mix-up for this sample (controlled by the given mixup rate)
-        if random.random() < self.mixup:
-            datum = self.data[index]
-            # find another sample to mix, also do balance sampling
-            # sample the other sample from the multinomial distribution, will make the performance worse
-            # mix_sample_idx = np.random.choice(len(self.data), p=self.sample_weight_file)
-            # sample the other sample from the uniform distribution
-            mix_sample_idx = random.randint(0, len(self.data)-1)
-            mix_datum = self.data[mix_sample_idx]
-            # get the mixed fbank
-            fbank, mix_lambda = self._wav2fbank(datum['wav'], mix_datum['wav'])
-            # initialize the label
-            label_indices = np.zeros(self.label_num)
-            # add sample 1 labels
-            for label_str in datum['labels'].split(','):
-                label_indices[int(self.index_dict[label_str])] += mix_lambda
-            # add sample 2 labels
-            for label_str in mix_datum['labels'].split(','):
-                label_indices[int(self.index_dict[label_str])] += 1.0-mix_lambda
-            label_indices = torch.FloatTensor(label_indices)
-        # if not do mixup
-        else:
-            # datum = self.data[index]
-            # label_indices = np.zeros(self.label_num)
-            # fbank, mix_lambda = self._wav2fbank(datum['wav'])
-            # for label_str in datum['labels'].split(','):
-            #     label_indices[int(self.index_dict[label_str])] = 1.0
 
-            # label_indices = torch.FloatTensor(label_indices)
-            fbank, mix_lambda = self._wav2fbank(os.path.join(self.datapath, self.name_dict.get(index)))
-            # for label_str in datum['labels'].split(','):
-            #     label_indices[int(self.index_dict[label_str])] = 1.0
-            score = self.index_dict.get(self.name_dict.get(index))
-            label_indices = float(score)
-        # SpecAug, not do for eval set
-        freqm = torchaudio.transforms.FrequencyMasking(self.freqm)
-        timem = torchaudio.transforms.TimeMasking(self.timem)
+        fbank = self._wav2fbank(os.path.join(self.datapath, self.name_dict.get(index)))
+        score = self.index_dict.get(self.name_dict.get(index))
+        label_indices = float(score)
+
         fbank = torch.transpose(fbank, 0, 1)
         # this is just to satisfy new torchaudio version, which only accept [1, freq, time]
         fbank = fbank.unsqueeze(0)
-        if self.freqm != 0:
-            fbank = freqm(fbank)
-        if self.timem != 0:
-            fbank = timem(fbank)
         # squeeze it back, it is just a trick to satisfy new torchaudio version
         fbank = fbank.squeeze(0)
         fbank = torch.transpose(fbank, 0, 1)
@@ -255,12 +156,6 @@ class NisqaDataset(Dataset):
         # skip normalization the input if you are trying to get the normalization stats.
         else:
             pass
-
-        if self.noise == True:
-            fbank = fbank + torch.rand(fbank.shape[0], fbank.shape[1]) * np.random.rand() / 10
-            fbank = torch.roll(fbank, np.random.randint(-10, 10), 0)
-
-        mix_ratio = min(mix_lambda, 1-mix_lambda) / max(mix_lambda, 1-mix_lambda)
 
         # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
         return fbank, label_indices

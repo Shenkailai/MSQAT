@@ -13,7 +13,6 @@ import numpy as np
 from torch.utils.data import WeightedRandomSampler
 import torch.nn.functional as F
 from sklearn import metrics
-from config import Config
 from tqdm import tqdm
 from scipy.stats import spearmanr, pearsonr
 from torch.utils.tensorboard import SummaryWriter
@@ -77,7 +76,7 @@ def train_epoch(epoch, net, criterion, optimizer, scheduler, train_loader):
     return ret_loss, rho_s, rho_p, rmse
 
 
-def eval_epoch(config, epoch, net, criterion, test_loader):
+def eval_epoch(epoch, net, criterion, test_loader):
     with torch.no_grad():
         losses = []
         net.eval()
@@ -91,7 +90,6 @@ def eval_epoch(config, epoch, net, criterion, test_loader):
                 x_d = batch_x.cuda()
                 labels = batch_y
                 labels = torch.squeeze(labels.type(torch.FloatTensor)).cuda()
-                # x_d = five_point_crop(i, d_img=x_d, config=config)
                 pred += net(x_d)
 
             pred /= 5
@@ -122,6 +120,7 @@ def clipped_mse(y_hat, label, tau=0.5):
     mse = torch.mean(threshold * mse)
     return mse
 
+
 def clipped_mae(y_hat, label, tau=0.5):
     mae = F.l1_loss(y_hat, label, reduction='none')
     threshold = torch.abs(y_hat - label) > tau
@@ -131,7 +130,7 @@ def clipped_mae(y_hat, label, tau=0.5):
 
 if __name__ == '__main__':
     print("I am process %s, running on %s: starting (%s)" %
-        (os.getpid(), platform.uname()[1], time.asctime()))
+          (os.getpid(), platform.uname()[1], time.asctime()))
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -140,7 +139,7 @@ if __name__ == '__main__':
     parser.add_argument("--label-csv", type=str,
                         default=r'E:\SQA\NISQA_Corpus\NISQA_corpus_file.csv', help="csv with class labels")
     parser.add_argument("--dataset", type=str, default="nisqa",
-                        help="the dataset used", choices=["audioset", "esc50", "speechcommands"])
+                        help="the dataset used", choices=["nisqa", "tencent", "pstn"])
     parser.add_argument("--exp_dir", type=str, default="./nisqa_ssast_pre",
                         help="directory to dump experiments")
     parser.add_argument("--log_dir", type=str, default="./nisqa_ssast_pre_logs",
@@ -162,11 +161,9 @@ if __name__ == '__main__':
                         help="soft split time stride, overlap=patch_size-stride")
     parser.add_argument('--load_pretrained_mdl_path', help='if use SSL audio spectrogram transformer model',
                         type=str, default=r'F:\NISQA\multi-dimension-attention-network\src\pre_models\SSAST-Base-Patch'
-                                        r'-400.pth')
+                        r'-400.pth')
     parser.add_argument('--model_size', help='if use ImageNet pretrained audio spectrogram transformer model',
                         default='base')
-    parser.add_argument('--ast_type', help='use ast or ssast',
-                        default='ssast')
     parser.add_argument('--seed', type=int, default=20)
     parser.add_argument('--pad', type=str, default='repetitive')
     parser.add_argument('--scale', type=float, default=0.13)
@@ -181,24 +178,22 @@ if __name__ == '__main__':
     # transformer based model
 
     if args.pad == 'zero_padding':
-    # dataset spectrogram mean and std, used to normalize the input
+        # dataset spectrogram mean and std, used to normalize the input
         norm_stats = {'nisqa': [-6.9492087, 5.004692]}
         norm_stats_val = {'nisqa': [-6.659985, 5.0349174]}
     elif args.pad == 'repetitive':
-        norm_stats = {'nisqa': [-8.352813, 4.29885], 'pstn':[-7.476995,4.0516253], 'tencent':[-8.980769, 5.1074333]}
-        norm_stats_val = {'nisqa': [-8.185567, 4.3552947], 'pstn':[-7.472444, 4.0493846], 'tencent':[-8.983544, 5.2011952]}
-    target_length = {'nisqa': 1024, 'pstn': 1024, 'tencent':1024}
-    # if add noise for data augmentation, only use for speech commands
-    noise = {'nisqa': False, 'pstn': False, 'tencent':False}
+        norm_stats = {'nisqa': [-8.352813, 4.29885],
+                      'pstn': [-7.476995, 4.0516253], 'tencent': [-8.980769, 5.1074333]}
+        norm_stats_val = {'nisqa': [-8.185567, 4.3552947],
+                          'pstn': [-7.472444, 4.0493846], 'tencent': [-8.983544, 5.2011952]}
+    target_length = {'nisqa': 1024, 'pstn': 1024, 'tencent': 1024}
 
-    audio_conf = {'num_mel_bins': 128, 'target_length': target_length[args.dataset], 'freqm': args.freqm,
-                'timem': args.timem, 'mixup': args.mixup, 'dataset': args.dataset, 'mode': 'train',
-                'mean': norm_stats[args.dataset][0], 'std': norm_stats[args.dataset][1],
-                'noise': noise[args.dataset], 'padding_mode': args.pad}
-    val_audio_conf = {'num_mel_bins': 128, 'target_length': target_length[args.dataset], 'freqm': 0, 'timem': 0, 'mixup': 0,
-                    'dataset': args.dataset,
-                    'mode': 'evaluation', 'mean': norm_stats_val[args.dataset][0], 'std': norm_stats_val[args.dataset][1],
-                    'noise': False, 'padding_mode': args.pad}
+    audio_conf = {'num_mel_bins': 128, 'target_length': target_length[args.dataset],  'dataset': args.dataset, 'mode': 'train',
+                  'mean': norm_stats[args.dataset][0], 'std': norm_stats[args.dataset][1],
+                  'padding_mode': args.pad}
+    val_audio_conf = {'num_mel_bins': 128, 'target_length': target_length[args.dataset], 'dataset': args.dataset,
+                      'mode': 'evaluation', 'mean': norm_stats_val[args.dataset][0], 'std': norm_stats_val[args.dataset][1],
+                      'padding_mode': args.pad}
 
     train_loader = torch.utils.data.DataLoader(
         dataloader.NisqaDataset(
@@ -210,14 +205,12 @@ if __name__ == '__main__':
             args.datapath, label_csv=args.label_csv, audio_conf=val_audio_conf, isTrain=False),
         batch_size=args.batch_size * 2, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
-
-
     model_tag = 'ssast_fshape-{}_tshape-{}_{}_{}_{}_{}_seed{}_premodel-{}-{}-{}_scale{}'.format(
         args.fshape, args.tshape, args.n_epochs, args.batch_size, args.loss_type, args.model_size, args.seed, os.path.basename(
             args.load_pretrained_mdl_path), args.pad, args.comment, args.scale
     )
-    net = models.MANIQA(model_size=args.model_size, fshape=args.fshape, fstride=args.fstride, tshape=args.tshape,
-                        tstride=args.tstride, load_pretrained_mdl_path=args.load_pretrained_mdl_path, ast_type='ssast', scale=args.scale)
+    net = models.MSQAT(model_size=args.model_size, fshape=args.fshape, fstride=args.fstride, tshape=args.tshape,
+                       tstride=args.tstride, load_pretrained_mdl_path=args.load_pretrained_mdl_path, scale=args.scale)
     # net = torch.load(
     #     r'F:\NISQA\multi-dimension-attention-network\nisqa_ssast_pre\ssast_fshape-128_tshape-2_100_4_mae_base_seed20_premodel-SSAST-Base-Frame-400.pth-repetitive-ast_tab_swim_branch_scale0.13\epoch_53.pth')
     net = net.cuda()
@@ -236,11 +229,9 @@ if __name__ == '__main__':
         os.mkdir(model_save_path)
 
     print('Now starting training for {:d} epochs'.format(args.n_epochs))
-
-    # config file
-    config = Config({
-        "tensorboard_path": "./output/tensorboard/{}/".format(model_tag),
-    })
+    tensorboard_path = os.path.join('./output/tensorboard/', model_tag)
+    if not os.path.exists(tensorboard_path):
+        os.mkdir(tensorboard_path)
     # loss function
     if args.loss_type == 'mae':
         criterion = torch.nn.L1Loss()
@@ -250,7 +241,7 @@ if __name__ == '__main__':
         criterion = clipped_mse
     elif args.loss_type == 'clipped_mae':
         criterion = clipped_mae
-        
+
     optimizer = torch.optim.Adam(
         net.parameters(),
         lr=1e-5,
@@ -258,7 +249,7 @@ if __name__ == '__main__':
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=50, eta_min=0)
-    writer = SummaryWriter(config.tensorboard_path)
+    writer = SummaryWriter(tensorboard_path)
     # train & validation
     losses, scores = [], []
     best_srocc = 0
@@ -279,7 +270,7 @@ if __name__ == '__main__':
             logging.info('Starting eval...')
             logging.info('Running testing in epoch {}'.format(epoch + 1))
             loss, rho_s, rho_p, rmse = eval_epoch(
-                config, epoch, net, criterion, val_loader)
+                epoch, net, criterion, val_loader)
             print('Eval model of epoch{}, SRCC:{}, PLCC:{}, RMSE:{}'.format(
                 epoch + 1, rho_s, rho_p, rmse))
             logging.info('Eval done...')
@@ -289,11 +280,11 @@ if __name__ == '__main__':
                 best_plcc = rho_p
                 besst_rmse = rmse
                 # save weights
-                
-                logging.info('Saving weights and model of epoch{}, SRCC:{}, PLCC:{}, RMSE:{}'.format(
+
+                logging.info('Best weights and model of epoch{}, SRCC:{}, PLCC:{}, RMSE:{}'.format(
                     epoch + 1, best_srocc, best_plcc, besst_rmse))
             torch.save(net, os.path.join(
-                    model_save_path, 'epoch_{}.pth'.format(epoch + 1)))
+                model_save_path, 'epoch_{}.pth'.format(epoch + 1)))
 
         logging.info('Epoch {} done. Time: {:.2}min'.format(
             epoch + 1, (time.time() - start_time) / 60))

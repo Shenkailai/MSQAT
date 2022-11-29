@@ -31,7 +31,7 @@ class TABlock(nn.Module):
         return x
 
 
-class MSAQT(nn.Module):
+class MSQAT(nn.Module):
     def __init__(self, embed_dim=768, num_outputs=1,  drop=0.1, input_fdim=128, input_tdim=1024,
                  depths=[2, 2, 6, 2], window_size=4, dim_mlp=768, num_heads=[4, 8, 16, 32], fstride=16, tstride=16,
                  fshape=16, tshape=16, model_size='base', load_pretrained_mdl_path='./test_mdl.pth',
@@ -119,7 +119,7 @@ class MSAQT(nn.Module):
 
 if __name__ == '__main__':
     input_tdim = 1024
-    ast_mdl = MANIQA(input_tdim=input_tdim, fstride=128,
+    ast_mdl = MSQAT(input_tdim=input_tdim, fstride=128,
                      fshape=128, tstride=2, tshape=2).cuda()
     # input a batch of 10 spectrogram, each with 100 time frames and 128 frequency bins
     test_input = torch.rand([1, input_tdim, 128]).cuda()
