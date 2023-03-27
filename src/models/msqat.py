@@ -4,7 +4,7 @@ import torch.nn as nn
 from .swin import SwinTransformer
 from .ssast_models import SSASTModel
 from einops import rearrange
-
+from torchlibrosa.augmentation import SpecAugmentation
 
 class TABlock(nn.Module):
     def __init__(self, dim, drop=0.1):
@@ -46,7 +46,10 @@ class MSQAT(nn.Module):
         self.f_dim = input_fdim // fshape
         self.t_dim = input_tdim // tshape
 
-        self.conv1 = nn.Conv2d(embed_dim, embed_dim, 1, 1, 0)
+        self.spec_augmenter = SpecAugmentation(time_drop_width=128, time_stripes_num=2, 
+            freq_drop_width=8, freq_stripes_num=2) # 2 2
+
+        self.conv1 = nn.Conv2d(embed_dim * 3, embed_dim, 1, 1, 0)
         self.tablock1 = nn.ModuleList()
         for i in range(num_tab):
             tab = TABlock(self.f_dim * self.t_dim)
@@ -93,15 +96,24 @@ class MSQAT(nn.Module):
             embed_dim), nn.Linear(embed_dim, num_outputs))
 
     def forward(self, x):
+        x = x.unsqueeze(1)
+        est_x = self.spec_augmenter(x)
+        x = x.squeeze(1)
+        est_x = est_x.squeeze(1)
         x = self.ast(x)  # 1 512 768
-
+        est_x = self.ast(est_x)
         # stage 1
+        res_x = torch.abs(x - est_x)
+        x = torch.concat((x,est_x,res_x),dim=2)
         x = rearrange(x, 'b (h w) c -> b c (h w)',
                       h=self.f_dim, w=self.t_dim)  # 1 768 512
+        
         for tab in self.tablock1:
             x = tab(x)
+        
         x = rearrange(x, 'b c (h w) -> b c h w', h=self.f_dim,
                       w=self.t_dim)  # 1 768 28 28
+        x = self.conv1(x)
         x = self.swintransformer1(x)
 
         x = rearrange(x, 'b c h w -> b (h w) c', h=self.f_dim, w=self.t_dim)

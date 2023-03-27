@@ -135,16 +135,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--datapath", type=str,
-                        default=r'E:\SQA\NISQA_Corpus', help="evaluation data json")
+                        default=r'/media/ckc/772E596D5E7915EF/Skl/NISQA_Corpus', help="evaluation data json")
     parser.add_argument("--label-csv", type=str,
-                        default=r'E:\SQA\NISQA_Corpus\NISQA_corpus_file.csv', help="csv with class labels")
+                        default=r'/media/ckc/772E596D5E7915EF/Skl/NISQA_Corpus/NISQA_corpus_file.csv', help="csv with class labels")
     parser.add_argument("--dataset", type=str, default="nisqa",
                         help="the dataset used", choices=["nisqa", "tencent", "pstn"])
-    parser.add_argument("--exp_dir", type=str, default="./output/nisqa/models",
+    parser.add_argument("--exp_dir", type=str, default="/media/ckc/772E596D5E7915EF/Skl/MSQAT/src/output/nisqa/models",
                         help="directory to dump experiments")
-    parser.add_argument("--log_dir", type=str, default="./output/nisqa/logs",
+    parser.add_argument("--log_dir", type=str, default="/media/ckc/772E596D5E7915EF/Skl/MSQAT/src/output/nisqa/logs",
                         help="directory to dump logs")
-    parser.add_argument('-b', '--batch_size', default=4,
+    parser.add_argument('-b', '--batch_size', default=8,
                         type=int, metavar='N', help='mini-batch size')
     parser.add_argument('-w', '--num-workers', default=0, type=int,
                         metavar='NW', help='# of workers for dataloading (default: 32)')
@@ -160,8 +160,7 @@ if __name__ == '__main__':
     parser.add_argument("--tshape", type=int, default=16,
                         help="soft split time stride, overlap=patch_size-stride")
     parser.add_argument('--load_pretrained_mdl_path', help='if use SSL audio spectrogram transformer model',
-                        type=str, default=r'F:\NISQA\multi-dimension-attention-network\src\pre_models\SSAST-Base-Patch'
-                        r'-400.pth')
+                        type=str, default=r'/media/ckc/772E596D5E7915EF/Skl/MSQAT/src/pre_models/SSAST-Base-Patch-400.pth')
     parser.add_argument('--model_size', help='if use ImageNet pretrained audio spectrogram transformer model',
                         default='base')
     parser.add_argument('--seed', type=int, default=20)
@@ -170,7 +169,7 @@ if __name__ == '__main__':
     parser.add_argument('-lt', '--loss_type', default='clipped_mse', type=str,
                         help='loss type (default: norm-in-norm)')
     parser.add_argument(
-        '--comment', default="new_loss")
+        '--comment', default="")
 
     args = parser.parse_args()
 
@@ -229,10 +228,10 @@ if __name__ == '__main__':
         os.mkdir(model_save_path)
 
     print('Now starting training for {:d} epochs'.format(args.n_epochs))
-    tensorboard_path = os.path.join('./output/tensorboard/', model_tag)
+    tensorboard_path = os.path.join('/media/ckc/772E596D5E7915EF/Skl/MSQAT/src/output/nisqa', model_tag)
 
     if not os.path.exists(tensorboard_path):
-        os.mkdir('./output/tensorboard/')
+        #os.mkdir('./output/tensorboard/')
         os.mkdir(tensorboard_path)
     # loss function
     if args.loss_type == 'mae':

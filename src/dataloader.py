@@ -104,8 +104,7 @@ class NisqaDataset(Dataset):
         print('number of wavs is {:d}'.format(self.label_num))
 
     def _wav2fbank(self, filename):
-
-        waveform, sr = torchaudio.load(filename)
+        waveform, sr = torchaudio.load(filename)    
         waveform = waveform - waveform.mean()
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
                                                   window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10)
@@ -126,10 +125,7 @@ class NisqaDataset(Dataset):
             to_dup = [fbank for t in range(dup_times)]
             to_dup.append(fbank[:remain, :])
             fbank = torch.Tensor(np.concatenate(to_dup, axis = 0))
-
-       
         return fbank
-       
 
     def __getitem__(self, index):
         """
