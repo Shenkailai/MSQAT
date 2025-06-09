@@ -1,21 +1,21 @@
+import argparse
 import logging
+import os
 import platform
 import random
-import models
-import dataloader
-import argparse
-import os
-import ast
 import sys
 import time
-import torch
+
 import numpy as np
-from torch.utils.data import WeightedRandomSampler
+import torch
 import torch.nn.functional as F
+from scipy.stats import pearsonr, spearmanr
 from sklearn import metrics
-from tqdm import tqdm
-from scipy.stats import spearmanr, pearsonr
+from torch.utils.data import WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
+
+import dataloader
+import models
 
 
 basepath = os.path.dirname(os.path.dirname(sys.path[0]))
@@ -128,10 +128,7 @@ def clipped_mae(y_hat, label, tau=0.5):
     return mae
 
 
-if __name__ == '__main__':
-    print("I am process %s, running on %s: starting (%s)" %
-          (os.getpid(), platform.uname()[1], time.asctime()))
-
+def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--datapath", type=str,
@@ -139,40 +136,45 @@ if __name__ == '__main__':
     parser.add_argument("--label-csv", type=str,
                         default=r'E:\SQA\NISQA_Corpus\NISQA_corpus_file.csv', help="csv with class labels")
     parser.add_argument("--dataset", type=str, default="nisqa",
-                        help="the dataset used", choices=["nisqa", "tencent", "pstn"])
+                        choices=["nisqa", "tencent", "pstn"], help="the dataset used")
     parser.add_argument("--exp_dir", type=str, default="./output/nisqa/models",
                         help="directory to dump experiments")
     parser.add_argument("--log_dir", type=str, default="./output/nisqa/logs",
                         help="directory to dump logs")
-    parser.add_argument('-b', '--batch_size', default=4,
-                        type=int, metavar='N', help='mini-batch size')
+    parser.add_argument('-b', '--batch_size', default=4, type=int,
+                        metavar='N', help='mini-batch size')
     parser.add_argument('-w', '--num-workers', default=0, type=int,
-                        metavar='NW', help='# of workers for dataloading (default: 32)')
+                        metavar='NW', help='# of workers for dataloading')
     parser.add_argument("--n-epochs", type=int, default=100,
                         help="number of maximum training epochs")
-    # the stride used in patch spliting, e.g., for patch size 16*16, a stride of 16 means no overlapping, a stride of 10 means overlap of 6.
     parser.add_argument("--fstride", type=int, default=16,
-                        help="soft split freq stride, overlap=patch_size-stride")
+                        help="soft split freq stride")
     parser.add_argument("--tstride", type=int, default=16,
-                        help="soft split time stride, overlap=patch_size-stride")
+                        help="soft split time stride")
     parser.add_argument("--fshape", type=int, default=16,
-                        help="soft split freq stride, overlap=patch_size-stride")
+                        help="soft split freq stride")
     parser.add_argument("--tshape", type=int, default=16,
-                        help="soft split time stride, overlap=patch_size-stride")
-    parser.add_argument('--load_pretrained_mdl_path', help='if use SSL audio spectrogram transformer model',
-                        type=str, default=r'F:\NISQA\multi-dimension-attention-network\src\pre_models\SSAST-Base-Patch'
-                        r'-400.pth')
-    parser.add_argument('--model_size', help='if use ImageNet pretrained audio spectrogram transformer model',
-                        default='base')
+                        help="soft split time stride")
+    parser.add_argument('--load_pretrained_mdl_path', type=str,
+                        default=r'F:\NISQA\multi-dimension-attention-network\src\pre_models\SSAST-Base-Patch-400.pth',
+                        help='if use SSL audio spectrogram transformer model')
+    parser.add_argument('--model_size', default='base',
+                        help='if use ImageNet pretrained audio spectrogram transformer model')
     parser.add_argument('--seed', type=int, default=20)
     parser.add_argument('--pad', type=str, default='repetitive')
     parser.add_argument('--scale', type=float, default=0.13)
     parser.add_argument('-lt', '--loss_type', default='clipped_mse', type=str,
-                        help='loss type (default: norm-in-norm)')
-    parser.add_argument(
-        '--comment', default="new_loss")
+                        help='loss type')
+    parser.add_argument('--comment', default="new_loss")
+    return parser.parse_args()
 
-    args = parser.parse_args()
+
+def main():
+    print(
+        "I am process %s, running on %s: starting (%s)"
+        % (os.getpid(), platform.uname()[1], time.asctime())
+    )
+    args = parse_args()
 
     setup_seed(args.seed)
     # transformer based model
@@ -202,7 +204,7 @@ if __name__ == '__main__':
 
     val_loader = torch.utils.data.DataLoader(
         dataloader.NisqaDataset(
-            args.datapath, label_csv=args.label_csv, audio_conf=val_audio_conf, isTrain=False),
+            args.datapath, label_csv=args.label_csv, audio_conf=val_audio_conf, is_train=False),
         batch_size=args.batch_size * 2, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     model_tag = 'ssast_fshape-{}_tshape-{}_{}_{}_{}_{}_seed{}_premodel-{}-{}-{}_scale{}'.format(
@@ -290,3 +292,7 @@ if __name__ == '__main__':
 
         logging.info('Epoch {} done. Time: {:.2}min'.format(
             epoch + 1, (time.time() - start_time) / 60))
+
+
+if __name__ == '__main__':
+    main()

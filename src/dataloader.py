@@ -1,64 +1,48 @@
 import csv
-import json
-import math
 import os
 import torchaudio
 import numpy as np
 import torch
-from torch import Tensor
-import torch.nn.functional
 from torch.utils.data import Dataset
-import random
 
-def make_index_dict(label_csv, isTrain, Eval):
-    index_lookup = {}
-    with open(label_csv, 'r') as f:
-        csv_reader = csv.DictReader(f)
-        line_count = 0
-        for row in csv_reader:
-            if Eval == None:
-                if isTrain:
-                    if 'train' in row['db'] or 'TRAIN' in row['db']:
-                        index_lookup[row['filepath_deg']] = row['mos']
-                        line_count += 1
-                else:
-                    if 'val' in row['db'] or 'VAL' in row['db']:
-                        index_lookup[row['filepath_deg']] = row['mos']
-                        line_count += 1
+
+def load_label_csv(label_csv, is_train=True, eval_db=None):
+    """Parse ``label_csv`` and return sample mappings.
+
+    Parameters
+    ----------
+    label_csv : str
+        Path to the csv file containing sample information.
+    is_train : bool, optional
+        Whether to load the training split. ``False`` loads the validation
+        split when ``eval_db`` is ``None``. Defaults to ``True``.
+    eval_db : str or None, optional
+        Specific dataset name used for evaluation. When provided, rows with a
+        matching ``db`` field are selected.
+
+    Returns
+    -------
+    tuple of dict
+        ``(index_lookup, name_lookup)`` where ``index_lookup`` maps file paths
+        to MOS scores and ``name_lookup`` maps an integer index to file paths.
+    """
+
+    index_lookup, name_lookup = {}, {}
+    with open(label_csv, "r") as f:
+        for count, row in enumerate(csv.DictReader(f)):
+            db = row["db"].lower()
+            if eval_db:
+                include = eval_db.lower() in db
+            elif is_train:
+                include = "train" in db
             else:
-                 if Eval in row['db']:
-                        index_lookup[row['filepath_deg']] = row['mos']
-                        line_count += 1
-                
-    return index_lookup
+                include = "val" in db
 
-def make_name_dict(label_csv, isTrain, Eval):
-    name_lookup = {}
-    with open(label_csv, 'r') as f:
-        csv_reader = csv.DictReader(f)
-        line_count = 0
-        for row in csv_reader:
-            if Eval == None:
-                if isTrain:
-                    if 'train' in row['db'] or 'TRAIN' in row['db']:
-                        name_lookup[line_count] = row['filepath_deg']
-                        line_count += 1
-                else:
-                    if 'val' in row['db'] or 'VAL' in row['db']:
-                        name_lookup[line_count] = row['filepath_deg']
-                        line_count += 1
-            else:
-                if Eval in row['db']:
-                    name_lookup[line_count] = row['filepath_deg']
-                    line_count += 1
-    return name_lookup
+            if include:
+                index_lookup[row["filepath_deg"]] = row["mos"]
+                name_lookup[count] = row["filepath_deg"]
 
-def lookup_list(index_list, label_csv):
-    label_list = []
-    table = make_name_dict(label_csv)
-    for item in index_list:
-        label_list.append(table[item])
-    return label_list
+    return index_lookup, name_lookup
 
 def preemphasis(signal,coeff=0.97):
     """perform preemphasis on the input signal.
@@ -70,17 +54,11 @@ def preemphasis(signal,coeff=0.97):
     return np.append(signal[0],signal[1:]-coeff*signal[:-1])
 
 class NisqaDataset(Dataset):
-    def __init__(self, datapath, audio_conf, label_csv=None, isTrain=True, Eval=None):
+    def __init__(self, datapath, audio_conf, label_csv=None, is_train=True, eval_db=None):
         """
         Dataset that manages audio recordings
         :param audio_conf: Dictionary containing the audio loading and preprocessing settings
-        :param dataset_json_file
         """
-        # self.datapath = dataset_json_file
-        # with open(dataset_json_file, 'r') as fp:
-        #     data_json = json.load(fp)
-
-        # self.data = data_json['data']
         self.audio_conf = audio_conf
         self.datapath = datapath
         print('---------------the {:s} dataloader---------------'.format(self.audio_conf.get('mode')))
@@ -98,8 +76,7 @@ class NisqaDataset(Dataset):
         else:
             print('use dataset mean {:.3f} and std {:.3f} to normalize the input.'.format(self.norm_mean, self.norm_std))
 
-        self.index_dict = make_index_dict(label_csv, isTrain, Eval)
-        self.name_dict = make_name_dict(label_csv, isTrain, Eval)
+        self.index_dict, self.name_dict = load_label_csv(label_csv, is_train, eval_db)
         self.label_num = len(self.index_dict)
         print('number of wavs is {:d}'.format(self.label_num))
 
