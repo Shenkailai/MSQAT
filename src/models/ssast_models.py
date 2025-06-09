@@ -2,14 +2,12 @@
 
 import torch.nn as nn
 import torch
-import sys
 
 from timm.models.layers import trunc_normal_
 import timm
 import numpy as np
 from timm.models.layers import to_2tuple
 from random import randrange
-from matplotlib import pyplot as plt
 import random
 
 
@@ -141,13 +139,7 @@ class SSASTModel(nn.Module):
             num_patches = self.p_f_dim * self.p_t_dim
             self.num_patches = num_patches
             self.v.patch_embed.num_patches = num_patches
-            print('pretraining patch split stride: frequency={:d}, time={:d}'.format(
-                fstride, tstride))
-            print('pretraining patch shape: frequency={:d}, time={:d}'.format(
-                fshape, tshape))
-            print('pretraining patch array dimension: frequency={:d}, time={:d}'.format(
-                self.p_f_dim, self.p_t_dim))
-            print('pretraining number of patches={:d}'.format(num_patches))
+
 
             # the linear patch projection layer, use 1 channel for spectrogram rather than the original 3 channels
             # for RGB images.
@@ -180,8 +172,6 @@ class SSASTModel(nn.Module):
                     'The model loaded is not from a torch.nn.Dataparallel object. Wrap it with torch.nn.Dataparallel '
                     'and try again.')
 
-            print('now load a SSL pretrained models from ' +
-                  load_pretrained_mdl_path)
             # during pretraining, fstride=fshape and tstride=tshape because no patch overlapping is used here,
             # input_fdim and input_tdim should be that used in pretraining, not that in the fine-tuning. we need to
             # know input_fdim and input_tdim to do positional embedding cut/interpolation. generally it should be
@@ -207,9 +197,6 @@ class SSASTModel(nn.Module):
             num_patches = f_dim * t_dim
             p_num_patches = p_f_dim * p_t_dim
             self.v.patch_embed.num_patches = num_patches
-            print(
-                'fine-tuning patch split stride: frequncey={:d}, time={:d}'.format(fstride, tstride))
-            print('fine-tuning number of patches={:d}'.format(num_patches))
 
             # patch shape should be same for pretraining and fine-tuning
             if fshape != p_fshape or tshape != p_tshape:
